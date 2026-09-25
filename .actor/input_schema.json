@@ -1,0 +1,101 @@
+{
+    "title": "ATS Jobs Scraper Input",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "companies": {
+            "title": "Companies",
+            "type": "array",
+            "editor": "stringList",
+            "description": "One per line. A company domain (figma.com), a careers page or job board URL (https://jobs.lever.co/palantir), a board token with its ATS (greenhouse:stripe), or just a company name (notion). Domains are checked for a linked job board first; names are tried against each ATS.",
+            "prefill": [
+                "figma.com",
+                "palantir.com",
+                "linear.app",
+                "huggingface.co",
+                "notion"
+            ]
+        },
+        "keywords": {
+            "title": "Job title keywords",
+            "type": "array",
+            "editor": "stringList",
+            "description": "Keep jobs whose title contains any of these, e.g. \"engineer\", \"data\". Case-insensitive."
+        },
+        "locations": {
+            "title": "Locations",
+            "type": "array",
+            "editor": "stringList",
+            "description": "Keep jobs whose location contains any of these, e.g. \"London\", \"United States\". \"Remote\" also matches jobs flagged remote."
+        },
+        "remoteOnly": {
+            "title": "Remote only",
+            "type": "boolean",
+            "description": "Keep only jobs the board marks as remote, or whose location says remote.",
+            "default": false
+        },
+        "departments": {
+            "title": "Departments",
+            "type": "array",
+            "editor": "stringList",
+            "description": "Keep jobs whose department or team contains any of these, e.g. \"Engineering\"."
+        },
+        "postedWithinDays": {
+            "title": "Posted within (days)",
+            "type": "integer",
+            "editor": "number",
+            "minimum": 1,
+            "description": "Keep jobs first posted in the last N days. Jobs without a posting date are left out when this is set."
+        },
+        "maxJobsPerCompany": {
+            "title": "Max jobs per company",
+            "type": "integer",
+            "editor": "number",
+            "minimum": 0,
+            "description": "Newest first. Leave empty for no limit.",
+            "prefill": 20
+        },
+        "maxItems": {
+            "title": "Max jobs in total",
+            "type": "integer",
+            "editor": "number",
+            "minimum": 1,
+            "default": 1000,
+            "description": "Stop after this many job rows across all companies. Company summary rows don't count."
+        },
+        "includeDescriptionHtml": {
+            "title": "Include description HTML",
+            "type": "boolean",
+            "description": "Add the original HTML description next to the plain-text one.",
+            "default": false
+        },
+        "includeCompanyRows": {
+            "title": "Include company summary rows",
+            "type": "boolean",
+            "description": "One free row per company with the detected ATS, open role count and department breakdown, or status \"ats_not_found\".",
+            "default": true
+        },
+        "mode": {
+            "title": "Mode",
+            "type": "string",
+            "editor": "select",
+            "enum": [
+                "snapshot",
+                "monitor"
+            ],
+            "enumTitles": [
+                "Snapshot: every open job",
+                "Monitor: only jobs opened or closed since the last run"
+            ],
+            "default": "snapshot",
+            "description": "Schedule monitor mode daily or weekly to track hiring changes."
+        },
+        "monitorStoreName": {
+            "title": "Monitor memory name",
+            "type": "string",
+            "editor": "textfield",
+            "description": "Key-value store that remembers the previous job lists. Use a different name for each separate monitor.",
+            "default": "ats-jobs-aggregator-monitor"
+        }
+    }
+}

@@ -1,0 +1,13 @@
+{
+    "actorSpecification": 1,
+    "name": "ats-jobs-aggregator",
+    "title": "ATS Jobs Scraper: Greenhouse, Lever, Ashby & Workable",
+    "description": "Get every open job from any company's Greenhouse, Lever, Ashby or Workable job board in one clean schema. Give it a domain and it finds the board for you. Salaries where posted, remote flags, filters, and a monitor mode for new and closed roles.",
+    "version": "0.1",
+    "meta": {
+        "templateId": "custom-no-proxy"
+    },
+    "input": "./input_schema.json",
+    "output": "./output_schema.json",
+    "dockerfile": "../Dockerfile"
+}

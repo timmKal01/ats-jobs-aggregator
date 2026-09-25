@@ -1,0 +1,16 @@
+{
+    "name": "ats-jobs-aggregator",
+    "version": "0.1.0",
+    "type": "module",
+    "description": "Every open job from companies' Greenhouse, Lever, Ashby and Workable job boards in one schema, with automatic job board detection from a company domain.",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "dependencies": {
+        "apify": "^3.2.6"
+    },
+    "scripts": {
+        "start": "node src/main.js",
+        "test": "node --test"
+    }
+}
