@@ -1,0 +1,88 @@
+{
+    "actorSpecification": 1,
+    "fields": {},
+    "views": {
+        "overview": {
+            "title": "Overview",
+            "transformation": {
+                "fields": [
+                    "rowType",
+                    "company",
+                    "title",
+                    "department",
+                    "location",
+                    "isRemote",
+                    "salaryMin",
+                    "salaryMax",
+                    "salaryCurrency",
+                    "postedAt",
+                    "applyUrl",
+                    "ats",
+                    "status",
+                    "openRoles"
+                ]
+            },
+            "display": {
+                "component": "table",
+                "properties": {
+                    "rowType": {
+                        "label": "Row type",
+                        "format": "text"
+                    },
+                    "company": {
+                        "label": "Company",
+                        "format": "text"
+                    },
+                    "title": {
+                        "label": "Title",
+                        "format": "text"
+                    },
+                    "department": {
+                        "label": "Department",
+                        "format": "text"
+                    },
+                    "location": {
+                        "label": "Location",
+                        "format": "text"
+                    },
+                    "isRemote": {
+                        "label": "Is remote",
+                        "format": "boolean"
+                    },
+                    "salaryMin": {
+                        "label": "Salary min",
+                        "format": "number"
+                    },
+                    "salaryMax": {
+                        "label": "Salary max",
+                        "format": "number"
+                    },
+                    "salaryCurrency": {
+                        "label": "Salary currency",
+                        "format": "text"
+                    },
+                    "postedAt": {
+                        "label": "Posted at",
+                        "format": "date"
+                    },
+                    "applyUrl": {
+                        "label": "Apply URL",
+                        "format": "link"
+                    },
+                    "ats": {
+                        "label": "ATS",
+                        "format": "text"
+                    },
+                    "status": {
+                        "label": "Status",
+                        "format": "text"
+                    },
+                    "openRoles": {
+                        "label": "Open roles",
+                        "format": "number"
+                    }
+                }
+            }
+        }
+    }
+}
