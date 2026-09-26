@@ -13,7 +13,7 @@ const JOB_EVENT = 'job-listing';
 // page link), Workable (homepage link), and a bare name resolved by trying each ATS.
 const DEFAULT_COMPANIES = ['figma.com', 'palantir.com', 'linear.app', 'huggingface.co', 'notion'];
 const CONCURRENCY = 3;
-const prettyToken = (t) => t.replace(/[-_]+/g, ' ').replace(/[a-z]/g, (c) => c.toUpperCase());
+const prettyToken = (t) => t.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase());
 
 const input = (await Actor.getInput()) ?? {};
 const emptyForm = !input.companies?.length;
