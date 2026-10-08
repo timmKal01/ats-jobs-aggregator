@@ -3,7 +3,7 @@
 // "no such board" rather than a failure.
 import { log } from 'apify';
 
-export const USER_AGENT = 'ats-jobs-aggregator/0.1 (+https://apify.com/m_ctim/ats-jobs-aggregator)';
+export const USER_AGENT = 'ats-jobs-aggregator/0.2 (+https://apify.com/m_ctim/ats-jobs-aggregator)';
 
 const TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 3;

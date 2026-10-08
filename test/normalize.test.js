@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    decodeEntities, departmentBreakdown, makeJobFilter, normalizeEmploymentType, normalizeInterval, stripHtml, toIso,
+    cleanLocation, decodeEntities, departmentBreakdown, finalizeJob, inferInterval, workplaceFromText, makeJobFilter, normalizeEmploymentType, normalizeInterval, stripHtml, toIso,
 } from '../src/normalize.js';
 import { diffJobs, snapshot, stateKey } from '../src/monitor.js';
 
@@ -44,7 +44,10 @@ test('filters: keywords, locations, remote, departments, posted within', () => {
 });
 
 test('department breakdown counts, largest first', () => {
-    assert.deepEqual(departmentBreakdown([...JOBS, { department: 'Sales' }]), { Sales: 2, Engineering: 1, Unspecified: 1 });
+    assert.deepEqual(departmentBreakdown([...JOBS, { department: 'Sales' }]), [
+        { name: 'Sales', count: 2 }, { name: 'Engineering', count: 1 }, { name: 'Unspecified', count: 1 },
+    ]);
+    assert.equal(departmentBreakdown([...JOBS, { department: 'Sales' }], 1).length, 1);
 });
 
 test('monitor: new and closed jobs against the last snapshot', () => {
@@ -54,4 +57,34 @@ test('monitor: new and closed jobs against the last snapshot', () => {
     assert.deepEqual(closed.map((j) => [j.jobId, j.title]), [['2', 'Account Executive']]);
     assert.equal(diffJobs(JOBS, null).opened.length, 3);
     assert.equal(stateKey('lever', 'Pal/antir'), 'board-lever-Pal_antir');
+});
+
+test('finalizeJob: placeholder locations, workplace from text, inferred pay interval', () => {
+    assert.equal(cleanLocation('na'), null);
+    assert.equal(cleanLocation(' N/A '), null);
+    assert.equal(cleanLocation('Nairobi'), 'Nairobi');
+    assert.equal(workplaceFromText('Hybrid - San Francisco, New York City, Austin'), 'hybrid');
+    assert.equal(workplaceFromText('Remote - United States'), 'remote');
+    assert.equal(workplaceFromText('On-site, Berlin'), 'onsite');
+    assert.equal(workplaceFromText('Hybrid - SF | Remote - US'), null);
+    assert.equal(workplaceFromText('London'), null);
+    assert.equal(inferInterval(74, 74), 'hour');
+    assert.equal(inferInterval(196000, 245000), 'year');
+    assert.equal(inferInterval(4000, 6000), null);
+
+    const stripe = finalizeJob({ location: 'na', allLocations: ['na'], workplaceType: null, isRemote: false, salaryMin: null, salaryMax: null, salaryInterval: null });
+    assert.equal(stripe.location, null);
+    assert.deepEqual(stripe.allLocations, []);
+    assert.equal(stripe.salaryInterval, null);
+
+    const vercel = finalizeJob({ location: 'Hybrid - San Francisco', allLocations: ['Hybrid - San Francisco'], workplaceType: null, isRemote: false });
+    assert.equal(vercel.workplaceType, 'hybrid');
+    assert.equal(vercel.isRemote, false);
+
+    const intern = finalizeJob({ location: 'SF', allLocations: ['SF'], workplaceType: null, salaryMin: 74, salaryMax: 74, salaryInterval: null });
+    assert.equal(intern.salaryInterval, 'hour');
+
+    const kept = finalizeJob({ location: 'Paris', allLocations: ['Paris'], workplaceType: 'remote', isRemote: true, salaryMin: 50, salaryMax: 60, salaryInterval: 'day' });
+    assert.equal(kept.salaryInterval, 'day');
+    assert.equal(kept.workplaceType, 'remote');
 });

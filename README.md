@@ -2,7 +2,17 @@
 
 Get every open job from a company's own job board in one clean format, whether the company hires through **Greenhouse, Lever, Ashby or Workable**. You don't need to know which one they use: give it a domain like `figma.com` and it finds the job board for you.
 
-Each job comes with title, department, team, location, remote flag, employment type, **salary range where the company publishes one**, posting date, apply link and the full description as plain text. Filter by keyword, location, department, remote or posting date, or switch to monitor mode to get only the jobs that opened or closed since your last run.
+Each job comes with title, department, team, location, remote / hybrid / onsite, employment type, **salary range where the company publishes one**, posting date, apply link and the full description as plain text. Filter by keyword, location, department, remote or posting date, or switch to monitor mode to get only the jobs that opened or closed since your last run.
+
+**$2 per 1,000 jobs.** Company summary rows are free, and so are companies where no board is found.
+
+### Why this one
+
+- **Just paste domains.** Most ATS scrapers make you find each company's board token first. This one finds the board from `stripe.com`, `linear.app` or even a bare name like `notion`, and tells you how sure it is.
+- **Four systems, one schema.** Greenhouse, Lever (US and EU), Ashby and Workable all come back with the same fields, so you can merge them without cleanup.
+- **Salaries normalized.** Pay ranges across US pay zones are merged into one min and max, with currency and interval.
+- **Monitor mode reports closed roles too**, not just new ones. Schedule it daily and you pay only for what changed.
+- **Fast and reliable.** It reads the public job APIs these systems provide for career pages: no browser, no proxies, no logins. In a test on 8 October 2026, 10 of 10 companies (Figma, Palantir, Linear, Hugging Face, Notion, Stripe, Airbnb, OpenAI, Ramp, Vercel) were found and returned in 9 seconds.
 
 ## Who it's for
 
@@ -127,7 +137,13 @@ A company summary row (department list shortened):
   "openRoles": 163,
   "matchingRoles": 163,
   "returnedRoles": 20,
-  "departments": { "Sales": 56, "Engineering": 29, "Business Operations": 15, "Design": 13 },
+  "departmentCount": 21,
+  "departments": [
+    { "name": "Sales", "count": 56 },
+    { "name": "Engineering", "count": 29 },
+    { "name": "Business Operations", "count": 15 },
+    { "name": "Design", "count": 13 }
+  ],
   "remoteRoles": 0,
   "rolesWithSalary": 108,
   "boardUrl": "https://job-boards.greenhouse.io/figma",
@@ -141,7 +157,7 @@ A company summary row (department list shortened):
 }
 ```
 
-`openRoles` counts every open job; `matchingRoles` counts those passing your filters; `returnedRoles` is what this run returned after the caps.
+`departments` lists the 15 largest departments by open roles, and `departmentCount` says how many there are in total. `openRoles` counts every open job; `matchingRoles` counts those passing your filters; `returnedRoles` is what this run returned after the caps.
 
 In monitor mode, job rows also carry `changeType`: `new` or `closed`. Closed rows keep the title, location and links remembered from the previous run. Company rows add `newRoles`, `closedRoles` and `isFirstRun`. The first run for a board saves a baseline and reports every job as `new`.
 
@@ -151,12 +167,12 @@ In monitor mode, job rows also carry `changeType`: `new` or `closed`. Closed row
 |---|---|---|---|---|
 | Salary range | When the company enables pay transparency | When the company publishes one | When the company shows compensation | Not published |
 | Employment type | Rarely | Yes | Yes | Yes |
-| Workplace type (remote / hybrid / onsite) | Only when the location says "Remote" | Yes | Yes | Remote flag only |
+| Workplace type (remote / hybrid / onsite) | From the location text ("Hybrid - San Francisco", "Remote - US") | Yes | Yes | Remote flag, or from the location text |
 | Team | No | Yes | Yes | No |
 | Last updated date | Yes | No | No | No |
 | Company name | Yes | No (board token is used) | No (board token is used) | Yes |
 
-Fields a board doesn't publish are `null`, never guessed. When a company lists several pay zones (Greenhouse often has one range per US zone), `salaryMin` and `salaryMax` span all ranges in the first range's currency.
+Fields a board doesn't publish are `null`. Two things are worked out rather than read directly: workplace type from the location text when the board has no field for it, and the pay interval when a board posts a range without saying per what (under 1,000 is treated as hourly, 10,000 and up as yearly, anything between stays `null`). Placeholder locations such as `na` or `TBD` come back as `null`. When a company lists several pay zones (Greenhouse often has one range per US zone), `salaryMin` and `salaryMax` span all ranges in the first range's currency.
 
 ## FAQ
 
@@ -172,7 +188,17 @@ Fields a board doesn't publish are `null`, never guessed. When a company lists s
 
 ## Pricing
 
-Pay per job row returned. Company summary rows are free, and so are companies where no board was found.
+**$0.002 per job row returned ($2 per 1,000 jobs).** Company summary rows are free, and so are companies where no board was found. No start fee.
+
+Some examples:
+
+| Run | Job rows | Cost |
+|---|---|---|
+| Default example (5 companies, 20 jobs each) | about 90 | about $0.18 |
+| Every open job at one large company (OpenAI, ~800 roles) | about 800 | about $1.60 |
+| Daily monitor over 50 companies, after the first run | only new and closed roles, often a few dozen | a few cents a day |
+
+Set `maxJobsPerCompany` or `maxItems` to cap what a run can cost.
 
 ## Disclaimer
 

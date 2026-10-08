@@ -12,9 +12,11 @@
                     "department",
                     "location",
                     "isRemote",
+                    "workplaceType",
                     "salaryMin",
                     "salaryMax",
                     "salaryCurrency",
+                    "salaryInterval",
                     "postedAt",
                     "applyUrl",
                     "ats",
@@ -80,6 +82,14 @@
                     "openRoles": {
                         "label": "Open roles",
                         "format": "number"
+                    },
+                    "workplaceType": {
+                        "label": "Workplace",
+                        "format": "text"
+                    },
+                    "salaryInterval": {
+                        "label": "Pay per",
+                        "format": "text"
                     }
                 }
             }

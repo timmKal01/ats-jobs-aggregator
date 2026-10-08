@@ -1,6 +1,6 @@
 # Pricing proposal: ats-jobs-aggregator
 
-Not set on Apify yet. For review.
+Decided 2026-10-08: go live at $0.002 per job (`job-listing` event). Set in Apify Console > Actor > Publication > Monetization.
 
 ## Proposal
 

@@ -106,14 +106,66 @@ export function makeJobFilter({ keywords, locations, remoteOnly, departments, po
     };
 }
 
-/** Department -> open role count, largest first. Jobs with no department count as "Unspecified". */
-export function departmentBreakdown(jobs) {
+/**
+ * Top departments by open roles, largest first, as a list so dataset tables and CSV exports get a
+ * fixed set of columns (a {name: count} object made one column per department name).
+ */
+export const TOP_DEPARTMENTS = 15;
+export function departmentBreakdown(jobs, limit = TOP_DEPARTMENTS) {
     const counts = {};
     for (const j of jobs) {
         const d = j.department || 'Unspecified';
         counts[d] = (counts[d] ?? 0) + 1;
     }
-    return Object.fromEntries(Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])));
+    return Object.entries(counts)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .slice(0, limit)
+        .map(([name, count]) => ({ name, count }));
+}
+
+/** Placeholder locations some boards publish ("na", "TBD") are treated as missing. */
+export function cleanLocation(s) {
+    const t = s == null ? '' : String(s).trim();
+    return !t || /^(n\/?a|tbd|tba|none|unknown|-+)$/i.test(t) ? null : t;
+}
+
+/** Workplace type from free-text locations like "Hybrid - San Francisco" or "Remote - US". Mixed lists stay null. */
+export function workplaceFromText(text) {
+    const s = text ?? '';
+    const remote = /\bremote\b/i.test(s);
+    const hybrid = /\bhybrid\b/i.test(s);
+    const onsite = /\b(on[\s-]?site|in[\s-]office)\b/i.test(s);
+    if ([remote, hybrid, onsite].filter(Boolean).length !== 1) return null;
+    return remote ? 'remote' : hybrid ? 'hybrid' : 'onsite';
+}
+
+/**
+ * When a board posts a pay range without saying per what, the size makes it clear:
+ * under 1,000 is hourly, 10,000 and up is yearly. Anything in between stays unknown.
+ */
+export function inferInterval(min, max) {
+    const v = Number.isFinite(max) ? max : min;
+    if (!Number.isFinite(v) || v <= 0) return null;
+    if (v < 1000) return 'hour';
+    if (v >= 10000) return 'year';
+    return null;
+}
+
+/** Shared clean-up applied to every normalized job, whatever ATS it came from. */
+export function finalizeJob(j) {
+    const allLocations = [...new Set((j.allLocations ?? []).map(cleanLocation).filter(Boolean))];
+    const location = cleanLocation(j.location) ?? allLocations[0] ?? null;
+    if (location && !allLocations.length) allLocations.push(location);
+    const workplaceType = j.workplaceType ?? workplaceFromText([location, ...allLocations].join(' | '));
+    const hasSalary = Number.isFinite(j.salaryMin) || Number.isFinite(j.salaryMax);
+    return {
+        ...j,
+        location,
+        allLocations,
+        workplaceType,
+        isRemote: Boolean(j.isRemote) || workplaceType === 'remote',
+        salaryInterval: j.salaryInterval ?? (hasSalary ? inferInterval(j.salaryMin, j.salaryMax) : null),
+    };
 }
 
 export const byNewest = (a, b) => (b.postedAt ?? '').localeCompare(a.postedAt ?? '') || String(a.jobId).localeCompare(String(b.jobId));

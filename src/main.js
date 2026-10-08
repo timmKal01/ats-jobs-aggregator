@@ -2,7 +2,7 @@ import { Actor, log } from 'apify';
 import { ADAPTERS } from './ats.js';
 import { parseCompanyInput } from './detect.js';
 import { resolveCompany } from './resolve.js';
-import { byNewest, departmentBreakdown, makeJobFilter, stripHtml } from './normalize.js';
+import { byNewest, departmentBreakdown, finalizeJob, makeJobFilter, stripHtml } from './normalize.js';
 import { diffJobs, openMonitorStore, snapshot, stateKey } from './monitor.js';
 
 await Actor.init();
@@ -14,6 +14,8 @@ const JOB_EVENT = 'job-listing';
 const DEFAULT_COMPANIES = ['figma.com', 'palantir.com', 'linear.app', 'huggingface.co', 'notion'];
 const CONCURRENCY = 3;
 const prettyToken = (t) => t.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase());
+// A name typed all lowercase ("notion") is shown capitalized; anything with capitals is kept as typed.
+const prettyName = (n) => (/^[a-z0-9 _-]+$/.test(n) ? prettyToken(n) : n);
 
 const input = (await Actor.getInput()) ?? {};
 const emptyForm = !input.companies?.length;
@@ -47,7 +49,7 @@ async function processCompany(raw) {
     const board = resolved.board;
     const base = {
         // Greenhouse and Workable report the company name; for Lever and Ashby the board token is the best available label.
-        company: board?.companyName ?? (parsed.kind === 'name' ? parsed.name : board?.token ? prettyToken(board.token) : parsed.host ?? parsed.input),
+        company: board?.companyName ?? (parsed.kind === 'name' ? prettyName(parsed.name) : board?.token ? prettyToken(board.token) : parsed.host ?? parsed.input),
         companyInput: parsed.input,
     };
     if (resolved.status !== 'ok') return { base, resolved, jobs: [], allJobs: [] };
@@ -56,7 +58,7 @@ async function processCompany(raw) {
     const allJobs = [];
     for (const raw of board.jobs) {
         try {
-            const j = adapter.normalize(raw, board.token);
+            const j = finalizeJob(adapter.normalize(raw, board.token));
             if (!j.jobId || !j.title) throw new Error('missing id or title');
             allJobs.push(j);
         } catch (err) {
@@ -147,6 +149,7 @@ for (const r of results) {
             matchingRoles: r.jobs.length,
             ...(monitorStore ? { newRoles: isFirstRun ? null : jobs.length, closedRoles: isFirstRun ? null : closed.length, isFirstRun } : {}),
             returnedRoles: jobRows.length,
+            departmentCount: new Set(r.allJobs.map((j) => j.department || 'Unspecified')).size,
             departments: departmentBreakdown(r.allJobs),
             remoteRoles: r.allJobs.filter((j) => j.isRemote).length,
             rolesWithSalary: r.allJobs.filter((j) => j.salaryMin !== null || j.salaryMax !== null).length,
