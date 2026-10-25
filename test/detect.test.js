@@ -121,3 +121,25 @@ test('finds same-site careers links on a homepage', () => {
         <a href="/company/jobs">Open roles</a><a href="https://other.com/careers">Partner careers</a>`;
     assert.deepEqual(careerLinks(html, 'https://www.acme.com/'), ['https://careers.acme.com/', 'https://www.acme.com/company/jobs']);
 });
+
+test('workday: career pages, job links and the JSON API all give "tenant.wdN/site"', () => {
+    const want = { ats: 'workday', token: 'nvidia.wd5/NVIDIAExternalCareerSite' };
+    for (const url of [
+        'https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite',
+        'https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite',
+        'https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/job/US-WA-Remote/Principal-Engineer_JR2026132',
+        'https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs',
+        'NVIDIA.WD5.myworkdayjobs.com/NVIDIAExternalCareerSite/',
+    ]) assert.deepEqual(extractAtsFromUrl(url), want, url);
+    assert.equal(extractAtsFromUrl('https://nvidia.wd5.myworkdayjobs.com/'), null);
+    assert.equal(extractAtsFromUrl('https://nvidia.wd5.myworkdayjobs.com/en-US/'), null);
+    assert.equal(extractAtsFromUrl('https://www.myworkdayjobs.com/'), null);
+});
+
+test('workday: explicit tokens keep the site name case, and careers pages linking a Workday site are found', () => {
+    assert.deepEqual(parseCompanyInput('workday:NVIDIA.wd5/NVIDIAExternalCareerSite'),
+        { input: 'workday:NVIDIA.wd5/NVIDIAExternalCareerSite', kind: 'board', ats: 'workday', token: 'nvidia.wd5/NVIDIAExternalCareerSite', method: 'input_token' });
+    assert.equal(parseCompanyInput('workday:nvidia').kind, 'name');
+    const html = '<a href="https://intel.wd1.myworkdayjobs.com/en-US/External">Search jobs</a> <a href="https://intel.wd1.myworkdayjobs.com/External/job/US-Oregon/X_JR1">One job</a>';
+    assert.deepEqual(findAtsInHtml(html), [{ ats: 'workday', token: 'intel.wd1/External', count: 2 }]);
+});

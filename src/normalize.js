@@ -69,6 +69,24 @@ export function toIso(value) {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/**
+ * Workday job lists say "Posted Today", "Posted Yesterday", "Posted 3 Days Ago" or "Posted 30+ Days Ago". Returns that
+ * day at 00:00 UTC, or null for "30+" and anything else, since the exact day isn't known.
+ */
+export function relativePostedDate(text, now = Date.now()) {
+    const s = String(text ?? '');
+    let days = null;
+    if (/\btoday\b/i.test(s)) days = 0;
+    else if (/\byesterday\b/i.test(s)) days = 1;
+    else {
+        const m = s.match(/\b(\d+)\s+days?\s+ago\b/i);
+        if (m) days = Number(m[1]);
+    }
+    if (days === null) return null;
+    const d = new Date(now - days * 86400e3);
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())).toISOString();
+}
+
 const INTERVALS = [
     [/hour/i, 'hour'], [/day|daily/i, 'day'], [/week/i, 'week'], [/month/i, 'month'], [/year|annual|salary/i, 'year'],
 ];

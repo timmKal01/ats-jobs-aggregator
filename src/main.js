@@ -1,7 +1,7 @@
 import { Actor, log } from 'apify';
 import { ADAPTERS } from './ats.js';
 import { parseCompanyInput } from './detect.js';
-import { resolveCompany } from './resolve.js';
+import { fetchJobDetail, resolveCompany } from './resolve.js';
 import { byNewest, departmentBreakdown, finalizeJob, makeJobFilter, stripHtml } from './normalize.js';
 import { diffJobs, openMonitorStore, snapshot, stateKey } from './monitor.js';
 
@@ -48,7 +48,7 @@ async function processCompany(raw) {
     const resolved = await resolveCompany(parsed).catch((err) => ({ status: 'error', pagesChecked: [], note: err.message }));
     const board = resolved.board;
     const base = {
-        // Greenhouse and Workable report the company name; for Lever and Ashby the board token is the best available label.
+        // Greenhouse and Workable report the company name and Workday's comes from its tenant; for Lever and Ashby the board token is the best available label.
         company: board?.companyName ?? (parsed.kind === 'name' ? prettyName(parsed.name) : board?.token ? prettyToken(board.token) : parsed.host ?? parsed.input),
         companyInput: parsed.input,
     };
@@ -65,7 +65,40 @@ async function processCompany(raw) {
             log.warning(`Skipping a malformed ${board.ats} job for ${parsed.input}`, { error: err.message, id: raw?.id ?? raw?.shortcode });
         }
     }
+    if (adapter.needsDetail) return { base, resolved, allJobs, jobs: await withDetails(board, adapter, allJobs) };
     return { base, resolved, allJobs, jobs: allJobs.filter(keep).sort(byNewest) };
+}
+
+// Workday lists jobs without descriptions, exact dates or every location, and each full posting is one more request
+// (a second apiece, see fetch.js). So postings are fetched only for jobs that can still become rows: new to a monitor,
+// passing the title filter, newest first, up to the per-company and run limits (three times that when a location,
+// remote or department filter will drop some afterwards).
+const keepTitle = makeJobFilter({ keywords });
+const narrowsAfterDetail = Boolean(locations?.length || remoteOnly || departments?.length || postedWithinDays > 0);
+async function withDetails(board, adapter, allJobs) {
+    const previous = monitorStore ? (await monitorStore.getValue(stateKey(board.ats, board.token)))?.jobs ?? null : null;
+    const budget = Math.min(maxItems, Number.isFinite(perCompanyLimit) ? perCompanyLimit * (narrowsAfterDetail ? 3 : 1) : Infinity);
+    const candidates = allJobs.filter((j) => !previous?.[j.jobId] && keepTitle(j)).sort(byNewest).slice(0, Math.max(0, budget));
+    const detailed = new Map();
+    for (const j of candidates) {
+        const body = await fetchJobDetail(board, j);
+        if (!body) continue;
+        try {
+            detailed.set(j.jobId, finalizeJob({ ...adapter.normalize(body, board.token), jobId: j.jobId }));
+        } catch (err) {
+            log.warning(`Skipping a malformed ${board.ats} posting ${j.jobId}`, { error: err.message });
+        }
+    }
+    if (candidates.length) log.info(`${board.ats}/${board.token}: read ${detailed.size} of ${candidates.length} full posting(s)`);
+    return allJobs.flatMap((j) => {
+        // Jobs a monitor saw last run stay as they were remembered.
+        if (previous?.[j.jobId]) return [{ ...j, ...previous[j.jobId], jobId: j.jobId }];
+        const d = detailed.get(j.jobId);
+        if (d) return keep(d) ? [d] : [];
+        // A monitor's baseline must hold every listed job, or the ones past this run's limit would show up as "new"
+        // next time. They're kept unverified: remembered, never returned as rows.
+        return monitorStore && keepTitle(j) ? [{ ...j, unverified: true }] : [];
+    }).sort(byNewest);
 }
 
 // Small worker pool; the HTTP layer already spaces requests per host.
@@ -97,6 +130,10 @@ for (const r of results) {
         const previous = await monitorStore.getValue(key);
         isFirstRun = !previous;
         ({ opened: jobs, closed } = diffJobs(r.jobs, previous?.jobs ?? null));
+        // Workday jobs past the run's limit are remembered unread (see withDetails). They're never new rows, and when
+        // a location, remote, department or date filter is set they can't be shown to have matched, so they don't close.
+        jobs = jobs.filter((j) => !j.unverified);
+        if (narrowsAfterDetail) closed = closed.filter((j) => !j.unverified);
         await monitorStore.setValue(key, { savedAt: scrapedAt, jobs: snapshot(r.jobs) });
     }
 
@@ -146,7 +183,7 @@ for (const r of results) {
             // high: linked from the company's own site or given directly; medium: guessed and the board names the company; low: guessed, owner not confirmable.
             detectionConfidence: resolved.status === 'ok' ? resolved.confidence : null,
             openRoles: r.allJobs.length,
-            matchingRoles: r.jobs.length,
+            matchingRoles: r.jobs.filter((j) => !j.unverified).length,
             ...(monitorStore ? { newRoles: isFirstRun ? null : jobs.length, closedRoles: isFirstRun ? null : closed.length, isFirstRun } : {}),
             returnedRoles: jobRows.length,
             departmentCount: new Set(r.allJobs.map((j) => j.department || 'Unspecified')).size,
@@ -155,7 +192,7 @@ for (const r of results) {
             rolesWithSalary: r.allJobs.filter((j) => j.salaryMin !== null || j.salaryMax !== null).length,
             boardUrl: resolved.status === 'ok' ? ADAPTERS[board.ats].boardUrl(board.token) : null,
             pagesChecked: resolved.pagesChecked,
-            note: resolved.note ?? (resolved.status === 'ats_not_found' ? 'No Greenhouse, Lever, Ashby or Workable board found on the site or under its name. Try passing the board URL directly.' : null),
+            note: resolved.note ?? (resolved.status === 'ats_not_found' ? 'No Greenhouse, Lever, Ashby, Workable or Workday board found on the site or under its name. Try passing the board URL directly.' : null),
             sourceUrl: resolved.status === 'ok' ? board.apiUrl : parseCompanyInput(base.companyInput)?.url ?? null,
             scrapedAt,
         });

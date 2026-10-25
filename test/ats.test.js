@@ -96,3 +96,29 @@ test('token casing: workable and greenhouse lowercase, ashby keeps case', () => 
     assert.match(ADAPTERS.workable.apiUrl(ADAPTERS.workable.canonicalToken('HuggingFace')), /accounts\/huggingface\?/);
     assert.match(ADAPTERS.ashby.apiUrl(ADAPTERS.ashby.canonicalToken('Linear')), /job-board\/Linear\?/);
 });
+
+test('workday: list items are partial jobs; a full posting fills in the rest', () => {
+    const token = 'nvidia.wd5/NVIDIAExternalCareerSite';
+    const now = Date.parse('2026-10-25T09:00:00Z');
+    const list = fixture('workday-list.json');
+    const items = ADAPTERS.workday.list(list).map((j) => ADAPTERS.workday.normalize(j, token, now));
+    assert.ok(items.every(hasShape));
+    const multi = items.find((j) => j.jobId.endsWith('JR2025019'));
+    assert.equal(multi.location, null, '"6 Locations" is a count, not a place');
+    assert.equal(multi.postedAt, '2026-10-25T00:00:00.000Z', '"Posted Today"');
+    assert.equal(multi.detailPath, list.jobPostings.find((p) => p.externalPath.endsWith('JR2025019')).externalPath);
+    assert.equal(multi.sourceUrl, `https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite${multi.detailPath}`);
+    const remote = items.find((j) => j.jobId.endsWith('JR2026131'));
+    assert.equal(remote.location, 'US, WA, Remote');
+    assert.equal(remote.isRemote, true);
+
+    const full = ADAPTERS.workday.normalize(fixture('workday-job.json'), token);
+    assert.ok(hasShape(full));
+    assert.equal(full.jobId, remote.jobId, 'the posting id matches the list item');
+    assert.equal(full.postedAt, '2026-10-24T00:00:00.000Z');
+    assert.equal(full.employmentType, 'Full-time');
+    assert.ok(stripHtml(full.descriptionHtml).length > 200);
+    assert.equal(full.salaryMin, null);
+    assert.equal(ADAPTERS.workday.companyName(null, token), 'Nvidia');
+    assert.equal(ADAPTERS.workday.apiUrl(token), 'https://nvidia.wd5.myworkdayjobs.com/wday/cxs/nvidia/NVIDIAExternalCareerSite/jobs');
+});

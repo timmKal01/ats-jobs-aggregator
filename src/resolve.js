@@ -1,23 +1,69 @@
 // Turns one `companies` entry into a verified job board: explicit board, a link found on the
 // company's own site (homepage, careers links, /careers, /jobs), or a token guessed from its name.
 import { log } from 'apify';
-import { ADAPTERS, GUESS_ORDER } from './ats.js';
+import { ADAPTERS, GUESS_ORDER, workdayParts } from './ats.js';
 import { request } from './fetch.js';
 import { careerLinks, findAtsInHtml, hasGreenhouseJobIds, isAllowed, parseRobots, slugCandidates, verifyGuess } from './detect.js';
 
 const MAX_SITE_PAGES = 5;
 const MAX_CANDIDATES_PER_PAGE = 3;
+const WORKDAY_PAGE_SIZE = 20;
+// Workday reports at most 2,000 jobs for one search, however many a site has.
+const WORKDAY_MAX_JOBS = 2000;
 
 /** @returns {Promise<{found: boolean, ats: string, token: string, jobs?: object[], companyName?: string|null, apiUrl: string, category?: string}>} */
 export async function fetchBoard(atsKey, rawToken) {
     const adapter = ADAPTERS[atsKey];
     const token = adapter.canonicalToken(rawToken);
+    if (atsKey === 'workday') return fetchWorkdayBoard(token);
     const apiUrl = adapter.apiUrl(token);
     const res = await request(apiUrl);
     if (!res.ok) return { found: false, ats: atsKey, token, apiUrl, category: res.category, status: res.status, error: res.error };
     const jobs = adapter.list(res.body);
     if (!Array.isArray(jobs)) return { found: false, ats: atsKey, token, apiUrl, category: 'unexpected_shape' };
-    return { found: true, ats: atsKey, token, apiUrl, jobs, companyName: adapter.companyName(res.body) };
+    return { found: true, ats: atsKey, token, apiUrl, jobs, companyName: adapter.companyName(res.body, token) };
+}
+
+/**
+ * Every job a Workday career site lists, 20 a page, without descriptions. These are career pages rather than a
+ * published API, so the site's robots.txt is checked first.
+ */
+async function fetchWorkdayBoard(token) {
+    const adapter = ADAPTERS.workday;
+    if (!workdayParts(token)) return { found: false, ats: 'workday', token, apiUrl: null, category: 'invalid_token' };
+    const apiUrl = adapter.apiUrl(token);
+    const { origin, pathname } = new URL(apiUrl);
+    const robots = await request(`${origin}/robots.txt`, { json: false, accept: 'text/plain' });
+    if (!isAllowed(robots.ok ? parseRobots(robots.body) : [], pathname)) {
+        return { found: false, ats: 'workday', token, apiUrl, category: 'robots_disallowed' };
+    }
+    const jobs = [];
+    const seen = new Set();
+    let total = null;
+    for (let offset = 0; total === null || offset < Math.min(total, WORKDAY_MAX_JOBS); offset += WORKDAY_PAGE_SIZE) {
+        const res = await request(apiUrl, { post: { appliedFacets: {}, limit: WORKDAY_PAGE_SIZE, offset, searchText: '' } });
+        if (!res.ok) {
+            // An unknown site name answers 4xx rather than 404.
+            if (offset === 0) return { found: false, ats: 'workday', token, apiUrl, category: res.category === 'client_error' ? 'not_found' : res.category, status: res.status, error: res.error };
+            log.warning(`Workday list for ${token} stopped after ${jobs.length} of ${total} jobs: ${res.status || res.category}`);
+            break;
+        }
+        // Only the first page carries the total, and a page past the end comes back as the first page again,
+        // so the loop stops at the total rather than at an empty page.
+        if (total === null) total = Number(res.body?.total) || 0;
+        const page = adapter.list(res.body) ?? [];
+        for (const j of page) if (j?.externalPath && !seen.has(j.externalPath)) { seen.add(j.externalPath); jobs.push(j); }
+        if (!page.length) break;
+    }
+    return { found: true, ats: 'workday', token, apiUrl, jobs, companyName: adapter.companyName(null, token) };
+}
+
+/** The full posting behind a Workday list item, or null if it can't be read. */
+export async function fetchJobDetail(board, job) {
+    const adapter = ADAPTERS[board.ats];
+    if (!adapter.detailUrl || !job.detailPath) return null;
+    const res = await request(adapter.detailUrl(board.token, job.detailPath));
+    return res.ok && res.body?.jobPostingInfo ? res.body : null;
 }
 
 async function guessFromSlugs(slugs, hints = []) {

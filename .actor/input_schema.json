@@ -7,7 +7,7 @@
             "title": "Companies",
             "type": "array",
             "editor": "stringList",
-            "description": "One per line. A company domain (figma.com), a careers page or job board URL (https://jobs.lever.co/palantir), a board token with its ATS (greenhouse:stripe), or just a company name (notion). Domains are checked for a linked job board first; names are tried against each ATS.",
+            "description": "One per line. A company domain (figma.com), a careers page or job board URL (https://jobs.lever.co/palantir, or a Workday career site like https://adobe.wd5.myworkdayjobs.com/external_experienced), a board token with its ATS (greenhouse:stripe, workday:adobe.wd5/external_experienced), or just a company name (notion). Domains are checked for a linked job board first; names are tried against each ATS except Workday, which needs its career site link.",
             "prefill": [
                 "figma.com",
                 "palantir.com",

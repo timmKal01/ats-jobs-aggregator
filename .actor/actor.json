@@ -1,8 +1,8 @@
 {
     "actorSpecification": 1,
     "name": "ats-jobs-aggregator",
-    "title": "ATS Jobs Scraper & Hiring Monitor: Greenhouse, Lever, Ashby",
-    "description": "Get every open job from any company's Greenhouse, Lever, Ashby or Workable board in one clean format, or monitor a list of companies and get only new and closed roles each run. Give it a domain and it finds the board. Salaries where posted, remote flags and filters.",
+    "title": "ATS Jobs Scraper: Workday, Greenhouse, Lever, Ashby",
+    "description": "Get every open job from any company's Workday, Greenhouse, Lever, Ashby or Workable job board in one clean format, or monitor a list of companies and get only new and closed roles each run. Give it a domain or career site link and it finds the board. Salaries where posted, remote flags, filters.",
     "version": "0.2",
     "meta": {
         "templateId": "custom-no-proxy"

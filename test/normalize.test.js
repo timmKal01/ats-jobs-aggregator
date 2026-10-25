@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-    cleanLocation, decodeEntities, departmentBreakdown, finalizeJob, inferInterval, workplaceFromText, makeJobFilter, normalizeEmploymentType, normalizeInterval, stripHtml, toIso,
+    cleanLocation, decodeEntities, departmentBreakdown, finalizeJob, inferInterval, workplaceFromText, makeJobFilter, normalizeEmploymentType, normalizeInterval, relativePostedDate, stripHtml, toIso,
 } from '../src/normalize.js';
 import { diffJobs, snapshot, stateKey } from '../src/monitor.js';
 
@@ -87,4 +87,14 @@ test('finalizeJob: placeholder locations, workplace from text, inferred pay inte
     const kept = finalizeJob({ location: 'Paris', allLocations: ['Paris'], workplaceType: 'remote', isRemote: true, salaryMin: 50, salaryMax: 60, salaryInterval: 'day' });
     assert.equal(kept.salaryInterval, 'day');
     assert.equal(kept.workplaceType, 'remote');
+});
+
+test('workday relative dates become that day at 00:00 UTC; "30+ days" stays unknown', () => {
+    const now = Date.parse('2026-10-25T09:00:00Z');
+    assert.equal(relativePostedDate('Posted Today', now), '2026-10-25T00:00:00.000Z');
+    assert.equal(relativePostedDate('Posted Yesterday', now), '2026-10-24T00:00:00.000Z');
+    assert.equal(relativePostedDate('Posted 12 Days Ago', now), '2026-10-13T00:00:00.000Z');
+    assert.equal(relativePostedDate('Posted 1 Day Ago', now), '2026-10-24T00:00:00.000Z');
+    assert.equal(relativePostedDate('Posted 30+ Days Ago', now), null);
+    assert.equal(relativePostedDate(undefined, now), null);
 });

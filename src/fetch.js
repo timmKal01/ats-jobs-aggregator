@@ -7,16 +7,18 @@ export const USER_AGENT = 'ats-jobs-aggregator/0.2 (+https://apify.com/m_ctim/at
 
 const TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 3;
-// api.lever.co/robots.txt asks for Crawl-delay: 1. Everything else gets a small courtesy gap.
+// api.lever.co/robots.txt asks for Crawl-delay: 1. Workday career sites have no public API, only the JSON their own
+// pages load, so they get the same one request a second. Everything else gets a small courtesy gap.
 const HOST_GAP_MS = { 'api.lever.co': 1000, 'api.eu.lever.co': 1000 };
 const DEFAULT_GAP_MS = 250;
+const gapFor = (host) => HOST_GAP_MS[host] ?? (host.endsWith('.myworkdayjobs.com') ? 1000 : DEFAULT_GAP_MS);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const hostQueues = new Map();
 
 /** Serializes requests per host and spaces them out, while different hosts run in parallel. */
 function waitForHost(host) {
-    const gap = HOST_GAP_MS[host] ?? DEFAULT_GAP_MS;
+    const gap = gapFor(host);
     const prev = hostQueues.get(host) ?? Promise.resolve();
     const next = prev.then(() => sleep(gap));
     hostQueues.set(host, next.catch(() => {}));
@@ -34,9 +36,9 @@ export function categorize(status) {
 
 /**
  * @returns {Promise<{ok: boolean, status: number, category: string, url: string, finalUrl?: string, body?: any, error?: string}>}
- * `body` is parsed JSON when `json` is true, otherwise text. Never throws.
+ * `body` is parsed JSON when `json` is true, otherwise text. `post` sends that object as a JSON POST body. Never throws.
  */
-export async function request(url, { json = true, accept, maxBytes = 25_000_000 } = {}) {
+export async function request(url, { json = true, accept, maxBytes = 25_000_000, post } = {}) {
     const host = new URL(url).host;
     let last = { ok: false, status: 0, category: 'network_error', url };
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -45,7 +47,13 @@ export async function request(url, { json = true, accept, maxBytes = 25_000_000 
         const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
         try {
             const res = await fetch(url, {
-                headers: { 'User-Agent': USER_AGENT, Accept: accept ?? (json ? 'application/json' : 'text/html,application/xhtml+xml') },
+                method: post ? 'POST' : 'GET',
+                headers: {
+                    'User-Agent': USER_AGENT,
+                    Accept: accept ?? (json ? 'application/json' : 'text/html,application/xhtml+xml'),
+                    ...(post ? { 'Content-Type': 'application/json' } : {}),
+                },
+                ...(post ? { body: JSON.stringify(post) } : {}),
                 redirect: 'follow',
                 signal: controller.signal,
             });

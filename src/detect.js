@@ -1,7 +1,11 @@
 // Pure ATS detection helpers: parse what the user typed, pull board tokens out of URLs and
 // careers-page HTML, guess tokens from a domain, and read robots.txt.
+import { workdayParts } from './ats.js';
 
-const ATS_NAMES = new Set(['greenhouse', 'lever', 'ashby', 'workable']);
+const ATS_NAMES = new Set(['greenhouse', 'lever', 'ashby', 'workable', 'workday']);
+// "/en-US/<site>" on a Workday career site is a language prefix, not the site name.
+const WORKDAY_LOCALE = /^[a-z]{2}(-[a-z]{2,4})?$/i;
+const WORKDAY_PATH_RESERVED = new Set(['wday', 'job', 'login', 'apply', 'userhome']);
 // Path segments and subdomains on ATS hosts that are never a company's board token.
 const GREENHOUSE_RESERVED = new Set(['embed', 'v1', 'jobs', 'static', 'assets', 'api']);
 const WORKABLE_PATH_RESERVED = new Set(['j', 'api', 'static', 'assets', 'careers', 'resources']);
@@ -62,10 +66,17 @@ export function extractAtsFromUrl(raw) {
     }
     const wk = host.match(/^([a-z0-9-]+)\.workable\.com$/);
     if (wk && !WORKABLE_SUB_RESERVED.has(wk[1])) return { ats: 'workable', token: wk[1] };
+    // A career page (/<site>, /en-US/<site>/job/...) or its JSON API (/wday/cxs/<tenant>/<site>/jobs).
+    const wd = host.match(/^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/);
+    if (wd) {
+        const parts = seg[0] === 'wday' && seg[1] === 'cxs' ? seg.slice(3) : seg;
+        const site = cleanToken(WORKDAY_LOCALE.test(parts[0] ?? '') ? parts[1] : parts[0]);
+        return site && !WORKDAY_PATH_RESERVED.has(site.toLowerCase()) ? { ats: 'workday', token: `${wd[1]}.${wd[2]}/${site}` } : null;
+    }
     return null;
 }
 
-const ATS_URL_RE = /(?:https?:)?\/\/(?:[a-z0-9-]+\.)*(?:greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com)(?:\/[^\s"'<>)\\`]*)?/gi;
+const ATS_URL_RE = /(?:https?:)?\/\/(?:[a-z0-9-]+\.)*(?:greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|myworkdayjobs\.com)(?:\/[^\s"'<>)\\`]*)?/gi;
 
 /**
  * Every ATS board referenced in a page (links, iframes, embed scripts, JSON blobs), most-referenced first.
@@ -142,11 +153,16 @@ export function verifyGuess(board, slug) {
 export function parseCompanyInput(raw) {
     const input = String(raw ?? '').trim();
     if (!input) return null;
-    const explicit = input.match(/^(greenhouse|lever|lever-eu|ashby|workable)\s*:\s*(.+)$/i);
+    const explicit = input.match(/^(greenhouse|lever|lever-eu|ashby|workable|workday)\s*:\s*(.+)$/i);
     if (explicit && !explicit[2].startsWith('//')) {
         const ats = explicit[1].toLowerCase();
-        const token = cleanToken(explicit[2]);
-        if (token) return { input, kind: 'board', ats, token: ats === 'ashby' ? token : token.toLowerCase(), method: 'input_token' };
+        if (ats === 'workday') {
+            const p = workdayParts(explicit[2].trim());
+            if (p) return { input, kind: 'board', ats, token: `${p.tenant}.${p.shard}/${p.site}`, method: 'input_token' };
+        } else {
+            const token = cleanToken(explicit[2]);
+            if (token) return { input, kind: 'board', ats, token: ats === 'ashby' ? token : token.toLowerCase(), method: 'input_token' };
+        }
     }
     const fromUrl = extractAtsFromUrl(input);
     if (fromUrl && /[./]/.test(input)) return { input, kind: 'board', ...fromUrl, method: 'input_url' };

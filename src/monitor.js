@@ -2,7 +2,8 @@
 // store is fresh on every run) and report only jobs that opened or closed since last time.
 import { Actor } from 'apify';
 
-const KEPT_FIELDS = ['title', 'department', 'team', 'location', 'isRemote', 'employmentType', 'postedAt', 'applyUrl', 'sourceUrl'];
+// `unverified`: a Workday job remembered from its list entry only, whose full posting wasn't read (see main.js).
+const KEPT_FIELDS = ['title', 'department', 'team', 'location', 'isRemote', 'employmentType', 'postedAt', 'applyUrl', 'sourceUrl', 'unverified'];
 
 /** Store keys allow [a-zA-Z0-9!-_.'()] only. */
 export const stateKey = (ats, token) => `board-${ats}-${token}`.replace(/[^a-zA-Z0-9!\-_.'()]/g, '_').slice(0, 250);

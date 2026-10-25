@@ -2,7 +2,7 @@
 // the human board URL, and a pure `normalize(body, token)` that maps the ATS's own JSON to the
 // shared job shape. Field names below were read off live responses on 2026-09-26.
 import {
-    mentionsRemote, normalizeEmploymentType, normalizeInterval, normalizeWorkplace, toIso, unescapeHtml,
+    mentionsRemote, normalizeEmploymentType, normalizeInterval, normalizeWorkplace, relativePostedDate, toIso, unescapeHtml,
 } from './normalize.js';
 
 const enc = encodeURIComponent;
@@ -170,6 +170,101 @@ const workable = {
     },
 };
 
-export const ADAPTERS = { greenhouse, lever: makeLever('global'), 'lever-eu': makeLever('eu'), ashby, workable };
-/** Order tried when guessing a board from a company name. */
+/**
+ * Workday career sites live at <tenant>.wd<N>.myworkdayjobs.com/<site>. A board token is "tenant.wdN/site" (the site
+ * name keeps its case, e.g. "nvidia.wd5/NVIDIAExternalCareerSite").
+ * @returns {{tenant: string, shard: string, site: string, host: string} | null}
+ */
+export function workdayParts(token) {
+    const m = String(token ?? '').match(/^([a-z0-9-]+)\.(wd\d+)\/([A-Za-z0-9_-]+)$/i);
+    if (!m) return null;
+    const tenant = m[1].toLowerCase();
+    const shard = m[2].toLowerCase();
+    return { tenant, shard, site: m[3], host: `${tenant}.${shard}.myworkdayjobs.com` };
+}
+
+// Workday has no public board API like the others. Its career pages load the same JSON this reads: a list of 20 jobs
+// a page (title, link, a location summary, "Posted 3 Days Ago") and one more request per job for the full posting.
+// `normalize` takes either shape; a list item becomes a partial job until its posting is fetched.
+const workday = {
+    name: 'workday',
+    canonicalToken: (t) => {
+        const p = workdayParts(t);
+        return p ? `${p.tenant}.${p.shard}/${p.site}` : t;
+    },
+    apiUrl: (t) => {
+        const p = workdayParts(t);
+        return `https://${p.host}/wday/cxs/${p.tenant}/${p.site}/jobs`;
+    },
+    boardUrl: (t) => {
+        const p = workdayParts(t);
+        return `https://${p.host}/${p.site}`;
+    },
+    /** The full posting for one job of the list (its `externalPath` is "/job/<location>/<title>_<id>"). */
+    detailUrl: (t, externalPath) => {
+        const p = workdayParts(t);
+        return `https://${p.host}/wday/cxs/${p.tenant}/${p.site}${externalPath}`;
+    },
+    // Postings name a legal entity ("2100 NVIDIA USA"), so the tenant is the better label.
+    companyName: (body, t) => {
+        const tenant = workdayParts(t)?.tenant;
+        return tenant ? tenant.replace(/[-_]+/g, ' ').replace(/\b[a-z]/g, (c) => c.toUpperCase()) : null;
+    },
+    list: (body) => body?.jobPostings,
+    needsDetail: true,
+    normalize(job, token, now = Date.now()) {
+        const url = (path) => (path ? `${workday.boardUrl(token)}${path}` : null);
+        if (job.jobPostingInfo) {
+            const info = job.jobPostingInfo;
+            const allLocations = [info.location, ...(info.additionalLocations ?? [])].map((l) => l?.trim()).filter(Boolean);
+            const sourceUrl = info.externalUrl ?? null;
+            return {
+                jobId: info.jobPostingId ?? info.id,
+                title: info.title?.trim(),
+                department: null,
+                team: null,
+                location: allLocations[0] ?? null,
+                allLocations,
+                isRemote: allLocations.some(mentionsRemote),
+                workplaceType: null,
+                employmentType: normalizeEmploymentType(info.timeType),
+                salaryMin: null,
+                salaryMax: null,
+                salaryCurrency: null,
+                salaryInterval: null,
+                postedAt: toIso(info.startDate),
+                updatedAt: null,
+                applyUrl: sourceUrl,
+                sourceUrl,
+                descriptionHtml: info.jobDescription ?? null,
+            };
+        }
+        // A list item: "6 Locations" only counts them, so the location waits for the full posting.
+        const location = /^\d+\s+locations?$/i.test(job.locationsText ?? '') ? null : job.locationsText?.trim() || null;
+        return {
+            jobId: job.externalPath?.split('/').pop() ?? null,
+            title: job.title?.trim(),
+            department: null,
+            team: null,
+            location,
+            allLocations: location ? [location] : [],
+            isRemote: mentionsRemote(location),
+            workplaceType: null,
+            employmentType: null,
+            salaryMin: null,
+            salaryMax: null,
+            salaryCurrency: null,
+            salaryInterval: null,
+            postedAt: relativePostedDate(job.postedOn, now),
+            updatedAt: null,
+            applyUrl: url(job.externalPath),
+            sourceUrl: url(job.externalPath),
+            descriptionHtml: null,
+            detailPath: job.externalPath ?? null,
+        };
+    },
+};
+
+export const ADAPTERS = { greenhouse, lever: makeLever('global'), 'lever-eu': makeLever('eu'), ashby, workable, workday };
+/** Order tried when guessing a board from a company name. Workday isn't guessable: its URLs need a shard and a site name. */
 export const GUESS_ORDER = ['greenhouse', 'lever', 'ashby', 'workable'];
